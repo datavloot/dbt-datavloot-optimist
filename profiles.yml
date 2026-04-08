@@ -1,0 +1,16 @@
+spotify_transforms:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      # In-memory connection; the lakehouse catalog is accessed via the attach below
+      path: ":memory:"
+      # Write silver models into the lakehouse DuckLake catalog
+      database: lakehouse
+      schema: silver
+      extensions:
+        - ducklake
+      attach:
+        - path: "../../data/catalog.duckdb"
+          alias: lakehouse
+          type: ducklake
