@@ -1,0 +1,65 @@
+# Fact config template
+#
+# Add a new entry to models/business/_fct_configs.yml for each fact model.
+# The model SQL file only needs its data source (if any) + a bare macro call:
+#
+#   {{ optimist.build_fact() }}
+#
+# The macro reads config from this file automatically at compile time via model.meta.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# In _fct_configs.yml, add:
+#
+# models:
+#   - name: fct_<event>
+#     description: ""
+#     meta:
+#       <config below>
+
+# ── Exactly one source option ─────────────────────────────────────────────────
+
+# Option A: staged source-layer model
+source_model: stg_<source>__<table>
+
+# Option B: dbt seed file
+# source_seed: <seed_name>
+
+# Option C: CTE defined earlier in the model SQL file
+# source_cte: <cte_name>
+
+# ── Required: surrogate key (defines the fact grain) ─────────────────────────
+surrogate_key:
+  columns:
+    - <grain_column>            # natural key(s) that uniquely identify one fact row
+  alias: <model_name>_key       # optional; defaults to <model_name>_key
+
+# ── Optional: dimension relationships ────────────────────────────────────────
+# Each entry generates a LEFT JOIN and pulls the dim surrogate key into the fact.
+# The same dimension can appear multiple times (e.g. dim_date for two timestamps).
+dimensions:
+  - dim: dim_<entity>           # dimension model to join (via ref())
+    fk: <fk_column>             # FK column in the source
+    key: dim_<entity>_key       # surrogate key to pull from dim (default: <dim>_key)
+    alias: dim_<entity>_key     # output column name (default: same as key)
+
+  - dim: dim_date               # example: joining dim_date on a timestamp column
+    fk: <timestamp_column>
+    dim_fk: date_day            # matching column in dim when FK names differ
+    fk_cast: date               # cast fk before joining (e.g. timestamp → date)
+    key: dim_date_key
+    alias: <event>_date_key     # use descriptive alias when joining same dim twice
+
+# ── Optional: deduplication ───────────────────────────────────────────────────
+# Remove if the source is already unique per grain.
+deduplicate:
+  partition_by:
+    - <grain_column>
+  order_by: _loaded_at desc
+
+# ── Optional: explicit measure columns ───────────────────────────────────────
+# Remove to select all source columns (dim key columns and staging audit columns
+# are always excluded automatically). Explicitly listing measures is recommended
+# to keep facts intentional and avoid accidental column sprawl.
+columns:
+  - <grain_column>
+  - <measure_column>

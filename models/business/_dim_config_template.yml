@@ -1,0 +1,47 @@
+# Dimension config template
+#
+# Add a new entry to models/business/_dim_configs.yml for each dimension.
+# The model SQL file only needs to contain its data source + a bare macro call:
+#
+#   {{ optimist.build_dimension() }}
+#
+# The macro reads config from this file automatically at compile time via model.meta.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# In _dim_configs.yml, add:
+#
+# models:
+#   - name: dim_<entity>
+#     description: ""
+#     meta:
+#       <config below>
+
+# ── Exactly one source option ─────────────────────────────────────────────────
+
+# Option A: staged source-layer model
+source_model: stg_<source>__<table>
+
+# Option B: dbt seed file
+# source_seed: <seed_name>
+
+# Option C: CTE defined earlier in the model SQL file
+# source_cte: <cte_name>
+
+# ── Required: surrogate key ───────────────────────────────────────────────────
+surrogate_key:
+  columns:
+    - <natural_key_column>      # add more for composite keys
+  alias: <model_name>_key       # optional; defaults to <model_name>_key
+
+# ── Optional: deduplication ───────────────────────────────────────────────────
+# Remove if the source is already unique per natural key.
+deduplicate:
+  partition_by:
+    - <natural_key_column>
+  order_by: _loaded_at desc
+
+# ── Optional: explicit column list ───────────────────────────────────────────
+# Remove to select all (staging audit columns excluded automatically).
+columns:
+  - <natural_key_column>
+  - <attribute_column>

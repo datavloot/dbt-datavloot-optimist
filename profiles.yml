@@ -1,4 +1,4 @@
-spotify_transforms:
+optimist:
   target: dev
   outputs:
     dev:
