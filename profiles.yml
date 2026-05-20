@@ -7,7 +7,7 @@ optimist:
       path: ":memory:"
       # Write silver models into the lakehouse DuckLake catalog
       database: lakehouse
-      schema: silver
+      schema: source
       extensions:
         - ducklake
       attach:
