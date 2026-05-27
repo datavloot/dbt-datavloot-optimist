@@ -1,10 +1,13 @@
 {#
     Date dimension — one row per calendar day.
-    Config lives in _dim_configs.yml under this model's meta block.
 
     Date range is configurable via dbt variables (defaults: 2015-01-01 → 2035-12-31):
         dbt run --vars '{"dim_date_start": "2018-01-01", "dim_date_end": "2040-12-31"}'
 #}
+
+{%- set dim_source -%}
+source_cte: date_spine
+{%- endset -%}
 
 {%- set start_date = var('dim_date_start', '2015-01-01') -%}
 {%- set end_date   = var('dim_date_end',   '2035-12-31') -%}
@@ -42,4 +45,4 @@ with date_spine as (
 
 )
 
-{{ optimist.build_dimension() }}
+{{ optimist.build_dimension(fromyaml(dim_source)) }}

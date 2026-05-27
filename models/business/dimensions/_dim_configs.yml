@@ -1,20 +1,10 @@
 version: 2
 
-# Dimension build configs — one entry per dimension model.
+# Dimension docs and tests — one entry per dimension model.
 #
-# Each model's meta block is read automatically by optimist.build_dimension()
-# at compile time, so the model SQL file only needs to contain the data source
-# (a CTE, or nothing at all for ref-based dims) plus a bare macro call:
-#
-#   {{ optimist.build_dimension() }}
-#
-# Config keys:
-#   source_model  — ref() to a staged source-layer model
-#   source_seed   — ref() to a dbt seed file
-#   source_cte    — name of a CTE defined earlier in the same model file
-#   surrogate_key — columns to hash + optional alias (defaults to <model>_key)
-#   deduplicate   — optional; partition_by + order_by to keep one row per key
-#   columns       — optional; explicit output list; omit to select all
+# Source is declared inline in each model's SQL file (so dbt discovers
+# the ref() dependency at parse time). Everything else lives here under
+# config.meta and is read by build_dimension() at compile time.
 # ─────────────────────────────────────────────────────────────────────────────
 
 models:
@@ -56,28 +46,28 @@ models:
         description: "True if the day falls on a Saturday or Sunday."
       - name: is_weekday
         description: "True if the day falls on a Monday through Friday."
-    meta:
-      source_cte: date_spine
-      surrogate_key:
-        columns: [date_day]
-        alias: dim_date_key
-      columns:
-        - date_day
-        - date_key
-        - year
-        - quarter
-        - month_num
-        - month_name
-        - quarter_start_date
-        - month_start_date
-        - week_of_year
-        - week_start_date
-        - day_of_year
-        - day_of_month
-        - day_of_week
-        - day_name
-        - is_weekend
-        - is_weekday
+    config:
+      meta:
+        surrogate_key:
+          columns: [date_day]
+          alias: dim_date_key
+        columns:
+          - date_day
+          - date_key
+          - year
+          - quarter
+          - month_num
+          - month_name
+          - quarter_start_date
+          - month_start_date
+          - week_of_year
+          - week_start_date
+          - day_of_year
+          - day_of_month
+          - day_of_week
+          - day_name
+          - is_weekend
+          - is_weekday
 
   - name: dim_time
     description: "Time-of-day dimension at minute granularity. 1 440 rows covering a full 24-hour period."
@@ -98,16 +88,16 @@ models:
         description: "Named time period: night (00–05 h), morning (06–11 h), afternoon (12–16 h), evening (17–20 h)."
       - name: is_business_hours
         description: "True if the hour falls between 09:00 and 17:59."
-    meta:
-      source_cte: time_spine
-      surrogate_key:
-        columns: [time_of_day]
-        alias: dim_time_key
-      columns:
-        - time_of_day
-        - time_hhmm
-        - hour
-        - minute
-        - minute_of_day
-        - period_of_day
-        - is_business_hours
+    config:
+      meta:
+        surrogate_key:
+          columns: [time_of_day]
+          alias: dim_time_key
+        columns:
+          - time_of_day
+          - time_hhmm
+          - hour
+          - minute
+          - minute_of_day
+          - period_of_day
+          - is_business_hours

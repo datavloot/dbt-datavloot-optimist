@@ -1,42 +1,56 @@
 {#
-    Generates a standard business-layer dimension model from a YAML config dict.
+    Generates a standard business-layer dimension model.
 
-    Prepends a surrogate key, selects business columns, appends an audit timestamp,
-    and optionally deduplicates. Exactly one source option must be provided.
+    Reads source from an inline config dict (required for parse-time dependency
+    discovery) and reads everything else from model.meta in _dim_configs.yml
+    (populated at compile time). Any key present in the inline dict takes
+    precedence over model.meta.
 
-    ── Preferred usage: config in _dim_configs.yml ───────────────────────────────
+    ── Usage ─────────────────────────────────────────────────────────────────────
 
-    Define the dimension config once in models/business/_dim_configs.yml under the
-    model's `meta:` block. The model file then just calls the macro with no arguments
-    and the config is read automatically from model.meta at compile time.
+    In the model SQL file, pass only the source. The macro merges it with the
+    config in _dim_configs.yml at compile time.
 
         -- dim_vessel.sql
-        {{ optimist.build_dimension() }}
-
-    ── Inline config (alternative) ──────────────────────────────────────────────
-
-    Pass a parsed YAML dict explicitly when you need to override or when the model
-    is not registered in _dim_configs.yml:
-
-        {%- set dim_config -%}
+        {%- set dim_source -%}
         source_model: stg_harbor__vessels
-        surrogate_key:
-          columns: [vessel_id]
         {%- endset -%}
 
-        {{ optimist.build_dimension(dim_config | fromyaml) }}
+        {{ optimist.build_dimension(fromyaml(dim_source)) }}
 
-    ── Source options (set exactly one in config) ────────────────────────────────
+        # _dim_configs.yml
+        - name: dim_vessel
+          config:
+            meta:
+              surrogate_key:
+                columns: [mmsi]
+                alias: dim_vessel_key
+              columns:
+                - mmsi
+                - vessel_name
+
+    For dimensions that open a CTE chain themselves (e.g. dim_date, dim_time):
+
+        -- dim_date.sql
+        {%- set dim_source -%}
+        source_cte: date_spine
+        {%- endset -%}
+
+        with date_spine as (...)
+
+        {{ optimist.build_dimension(fromyaml(dim_source)) }}
+
+    ── Source options (one required — pass inline so dbt can discover the dependency) ──
 
         source_model   — ref() to a staged source-layer model
         source_seed    — ref() to a dbt seed file
         source_cte     — name of a CTE already defined earlier in this model file;
                          the macro continues the CTE chain instead of opening WITH
 
-    ── Config keys ───────────────────────────────────────────────────────────────
+    ── Config keys (inline dict or model.meta in _dim_configs.yml) ───────────────
 
         source_model / source_seed / source_cte
-                       (str,  exactly one required)
+                       (str,  exactly one required — pass inline)
         surrogate_key  (dict, required) — columns list + optional alias
         deduplicate    (dict, optional) — partition_by + optional order_by
         columns        (list, optional) — explicit output columns; omit to select all
@@ -44,16 +58,22 @@
     See models/business/_dim_config_template.yml for the annotated full template.
 #}
 
-{%- macro build_dimension(config=none) -%}
+{%- macro build_dimension(dim_config=none) -%}
 
-    {#- Read config from model.meta when not passed explicitly -#}
-    {%- if config is none -%}
-        {%- set config = model.meta -%}
+    {#- Merge inline dict with model.meta; inline takes priority -#}
+    {#- At parse time: model.meta is {} (YAML not yet merged), source comes from dim_config -#}
+    {#- At compile time: model.meta is populated from _dim_configs.yml config.meta block -#}
+    {%- if dim_config is none -%}
+        {%- set dim_config = {} -%}
     {%- endif -%}
+    {%- set _meta = model.meta | default({}) -%}
 
-    {%- set source_model = config.get('source_model', none) -%}
-    {%- set source_seed  = config.get('source_seed',  none) -%}
-    {%- set source_cte   = config.get('source_cte',   none) -%}
+    {%- set source_model = dim_config.get('source_model') or _meta.get('source_model', none) -%}
+    {%- set source_seed  = dim_config.get('source_seed')  or _meta.get('source_seed',  none) -%}
+    {%- set source_cte   = dim_config.get('source_cte')   or _meta.get('source_cte',   none) -%}
+    {%- set sk_config    = dim_config.get('surrogate_key') or _meta.get('surrogate_key', {}) -%}
+    {%- set columns      = dim_config.get('columns')       or _meta.get('columns', []) -%}
+    {%- set dedup        = dim_config.get('deduplicate')   or _meta.get('deduplicate', none) -%}
 
     {#- Validate: exactly one source option must be set -#}
     {%- set _sources = [] -%}
@@ -61,21 +81,21 @@
     {%- if source_seed  -%}{%- do _sources.append('source_seed')  -%}{%- endif -%}
     {%- if source_cte   -%}{%- do _sources.append('source_cte')   -%}{%- endif -%}
 
-    {%- if _sources | length == 0 -%}
-        {{ exceptions.raise_compiler_error(
-            'build_dimension: one of source_model, source_seed, or source_cte is required in config.'
-        ) }}
-    {%- elif _sources | length > 1 -%}
-        {{ exceptions.raise_compiler_error(
-            'build_dimension: only one source option is allowed, got: ' ~ _sources | join(', ')
-        ) }}
+    {#- Only validate when executing — at parse time source may resolve via model.meta later -#}
+    {%- if execute -%}
+        {%- if _sources | length == 0 -%}
+            {{ exceptions.raise_compiler_error(
+                'build_dimension: one of source_model, source_seed, or source_cte is required.'
+            ) }}
+        {%- elif _sources | length > 1 -%}
+            {{ exceptions.raise_compiler_error(
+                'build_dimension: only one source option is allowed, got: ' ~ _sources | join(', ')
+            ) }}
+        {%- endif -%}
     {%- endif -%}
 
-    {%- set sk_config  = config['surrogate_key'] -%}
-    {%- set sk_columns = sk_config['columns'] -%}
+    {%- set sk_columns = sk_config.get('columns', []) -%}
     {%- set sk_alias   = sk_config.get('alias', this.identifier ~ '_key') -%}
-    {%- set columns    = config.get('columns', []) -%}
-    {%- set dedup      = config.get('deduplicate', none) -%}
 
     {#- Staging audit columns to exclude when selecting * from a staged source -#}
     {%- set _staging_audit = ['_loaded_at', '_source_name', '_source_table'] -%}
@@ -89,7 +109,7 @@
 
 ),
 
-{%- else %}
+{%- elif source_model or source_seed %}
 
 with source as (
 
@@ -100,6 +120,10 @@ with source as (
     {%- endif %}
 
 ),
+
+{%- else %}
+
+with source as (select 1 as _stub),
 
 {%- endif %}
 

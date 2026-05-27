@@ -100,7 +100,7 @@ doesn't exist in any source system, add it as a seed before building dimensions.
 2. Add an entry to `seeds/_seeds.yml` with descriptions and `data_tests`
 3. Run `dbt seed` to load it into the warehouse
 
-Seeds can then be used as a dimension source via `source_seed: <seed_name>` in `_dim_configs.yml`.
+Seeds can then be used as a dimension source via `source_seed: <seed_name>` in the inline config block of a dimension SQL file.
 
 Guidance on when seeds are appropriate: `seeds/how_to.md`
 
@@ -108,10 +108,33 @@ Guidance on when seeds are appropriate: `seeds/how_to.md`
 
 For each entity the captain cares about (person, product, location, vessel, etc.):
 
-1. Add a config block to `models/business/dimensions/_dim_configs.yml`
-2. Create `models/business/dimensions/dim_<entity>.sql`:
+1. Create `models/business/dimensions/dim_<entity>.sql` declaring only the source inline
+   (so dbt can discover the `ref()` dependency at parse time):
    ```sql
-   {{ optimist.build_dimension() }}
+   {%- set dim_source -%}
+   source_model: stg_<source>__<table>
+   {%- endset -%}
+
+   {{ optimist.build_dimension(fromyaml(dim_source)) }}
+   ```
+2. Add an entry to `models/business/dimensions/_dim_configs.yml` with column descriptions,
+   `data_tests`, and a `config.meta` block with the build config:
+   ```yaml
+   - name: dim_<entity>
+     description: ""
+     columns:
+       - name: dim_<entity>_key
+         description: "Surrogate key; MD5 hash of <natural_key>."
+       - name: <natural_key>
+         description: ""
+     config:
+       meta:
+         surrogate_key:
+           columns: [<natural_key>]
+           alias: dim_<entity>_key
+         columns:
+           - <natural_key>
+           - <attribute_column>
    ```
 
 `dim_date` and `dim_time` ship with the toolkit — reference them with `ref('dim_date')` and
@@ -119,25 +142,60 @@ For each entity the captain cares about (person, product, location, vessel, etc.
 
 After creating each dimension, ask the captain about data quality expectations — see **Step 7**.
 
-Config template: `models/business/dimensions/_dim_configs.yml` (see header comments)
-Full reference: `dbt_packages/optimist/models/business/_dim_config_template.yml`
-Docs: `dbt_packages/optimist/docs/business-layer.md`
+Full config reference: `dbt_packages/optimist/macros/business/build_dimension.sql` (docstring)
 
 ### Step 5 — Build facts
 
 For each event or transaction the captain wants to measure:
 
-1. Add a config block to `models/business/facts/_fct_configs.yml`
-2. Create `models/business/facts/fct_<event>.sql`:
+1. Create `models/business/facts/fct_<event>.sql` with the CTE chain. Declare the source inline
+   (so dbt discovers the source dependency at parse time), and add `-- depends_on:` hints for
+   each dimension so dbt can build the correct DAG:
    ```sql
-   {{ optimist.build_fact() }}
+   -- depends_on: {{ ref('dim_<entity>') }}
+   -- depends_on: {{ ref('dim_date') }}
+
+   {%- set fct_source -%}
+   source_cte: <final_cte_name>
+   {%- endset -%}
+
+   with
+   ...
+   <final_cte_name> as (...)
+
+   {{ optimist.build_fact(fromyaml(fct_source)) }}
+   ```
+2. Add an entry to `models/business/facts/_fct_configs.yml` with column descriptions,
+   `data_tests`, and a `config.meta` block with the build config:
+   ```yaml
+   - name: fct_<event>
+     description: ""
+     columns:
+       - name: fct_<event>_key
+         description: "Surrogate key; MD5 hash of <grain_columns>."
+     config:
+       meta:
+         surrogate_key:
+           columns: [<grain_column>]
+           alias: fct_<event>_key
+         dimensions:
+           - dim: dim_<entity>
+             fk: <fk_column>
+             key: dim_<entity>_key
+           - dim: dim_date
+             fk: <timestamp_column>
+             dim_fk: date_day
+             fk_cast: date
+             key: dim_date_key
+             alias: <event>_date_key
+         columns:
+           - <grain_column>
+           - <measure_column>
    ```
 
 After creating each fact, ask the captain about data quality expectations — see **Step 7**.
 
-Config template: `models/business/facts/_fct_configs.yml` (see header comments)
-Full reference: `dbt_packages/optimist/models/business/_fct_config_template.yml`
-Docs: `dbt_packages/optimist/docs/business-layer.md`
+Full config reference: `dbt_packages/optimist/macros/business/build_fact.sql` (docstring)
 
 ### Step 6 — Document
 

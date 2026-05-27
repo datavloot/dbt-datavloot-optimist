@@ -1,7 +1,10 @@
 {#
     Time dimension — one row per minute of the day (1 440 rows total).
-    Config lives in _dim_configs.yml under this model's meta block.
 #}
+
+{%- set dim_source -%}
+source_cte: time_spine
+{%- endset -%}
 
 with time_spine as (
 
@@ -29,4 +32,4 @@ with time_spine as (
 
 )
 
-{{ optimist.build_dimension() }}
+{{ optimist.build_dimension(fromyaml(dim_source)) }}

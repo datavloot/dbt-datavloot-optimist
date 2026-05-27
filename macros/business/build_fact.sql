@@ -1,41 +1,59 @@
 {#
-    Generates a standard business-layer fact model from a YAML config dict.
+    Generates a standard business-layer fact model.
 
-    Prepends a surrogate key, left-joins dimension tables to resolve their surrogate
-    keys, selects measure columns, and appends an audit timestamp. Optionally
-    deduplicates. Mirrors build_dimension in structure and usage.
+    Reads the source and dimension relationships from an inline config dict (required
+    for parse-time dependency discovery) and reads surrogate_key and columns from
+    model.meta in _fct_configs.yml (populated at compile time). Any key present in
+    the inline dict takes precedence over model.meta.
 
-    ── Preferred usage: config in _fct_configs.yml ───────────────────────────────
+    ── Usage ─────────────────────────────────────────────────────────────────────
 
-    Define the fact config once in models/business/_fct_configs.yml under the
-    model's `meta:` block. The model file then just calls the macro with no arguments.
+    In the model SQL file, pass only the source. The macro merges it with the
+    config in _fct_configs.yml at compile time.
 
         -- fct_journey.sql
-        {{ optimist.build_fact() }}
-
-    ── Inline config (alternative) ──────────────────────────────────────────────
-
-    Pass a parsed YAML dict explicitly when you need to override:
-
-        {%- set fct_config -%}
-        source_model: stg_harbor__journeys
-        surrogate_key:
-          columns: [journey_id]
+        {%- set fct_source -%}
+        source_cte: journeys
         {%- endset -%}
 
-        {{ optimist.build_fact(fct_config | fromyaml) }}
+        with
+        ...
+        journeys as (...)
 
-    ── Source options (set exactly one in config) ────────────────────────────────
+        {{ optimist.build_fact(fromyaml(fct_source)) }}
+
+        # _fct_configs.yml
+        - name: fct_journey
+          config:
+            meta:
+              surrogate_key:
+                columns: [journey_id]
+                alias: fct_journey_key
+              dimensions:
+                - dim: dim_vessel
+                  fk: mmsi
+                  key: dim_vessel_key
+                - dim: dim_date
+                  fk: departure_at
+                  dim_fk: date_day
+                  fk_cast: date
+                  key: dim_date_key
+                  alias: departure_date_key
+              columns:
+                - journey_id
+                - duration_minutes
+
+    ── Source options (one required — pass inline so dbt can discover the dependency) ──
 
         source_model   — ref() to a staged source-layer model
         source_seed    — ref() to a dbt seed file
         source_cte     — name of a CTE already defined earlier in this model file;
                          the macro continues the CTE chain instead of opening WITH
 
-    ── Config keys ───────────────────────────────────────────────────────────────
+    ── Config keys (inline dict or model.meta in _fct_configs.yml) ───────────────
 
         source_model / source_seed / source_cte
-                       (str,  exactly one required)
+                       (str,  exactly one required — pass inline)
         surrogate_key  (dict, required) — columns list + optional alias
         dimensions     (list, optional) — dim relationships; see below
         deduplicate    (dict, optional) — partition_by + optional order_by
@@ -60,20 +78,25 @@
 
     The same dimension can appear multiple times (e.g. dim_date for departure and
     arrival) — each gets a unique join alias automatically.
-
-    See models/business/_fct_config_template.yml for the annotated full template.
 #}
 
-{%- macro build_fact(config=none) -%}
+{%- macro build_fact(fct_config=none) -%}
 
-    {#- Read config from model.meta when not passed explicitly -#}
-    {%- if config is none -%}
-        {%- set config = model.meta -%}
+    {#- Merge inline dict with model.meta; inline takes priority -#}
+    {#- At parse time: model.meta is {} (YAML not yet merged), source comes from fct_config -#}
+    {#- At compile time: model.meta is populated from _fct_configs.yml config.meta block -#}
+    {%- if fct_config is none -%}
+        {%- set fct_config = {} -%}
     {%- endif -%}
+    {%- set _meta = model.meta | default({}) -%}
 
-    {%- set source_model = config.get('source_model', none) -%}
-    {%- set source_seed  = config.get('source_seed',  none) -%}
-    {%- set source_cte   = config.get('source_cte',   none) -%}
+    {%- set source_model = fct_config.get('source_model') or _meta.get('source_model', none) -%}
+    {%- set source_seed  = fct_config.get('source_seed')  or _meta.get('source_seed',  none) -%}
+    {%- set source_cte   = fct_config.get('source_cte')   or _meta.get('source_cte',   none) -%}
+    {%- set sk_config    = fct_config.get('surrogate_key') or _meta.get('surrogate_key', {}) -%}
+    {%- set dimensions   = fct_config.get('dimensions')    or _meta.get('dimensions', []) -%}
+    {%- set columns      = fct_config.get('columns')       or _meta.get('columns', []) -%}
+    {%- set dedup        = fct_config.get('deduplicate')   or _meta.get('deduplicate', none) -%}
 
     {#- Validate: exactly one source option must be set -#}
     {%- set _sources = [] -%}
@@ -81,22 +104,20 @@
     {%- if source_seed  -%}{%- do _sources.append('source_seed')  -%}{%- endif -%}
     {%- if source_cte   -%}{%- do _sources.append('source_cte')   -%}{%- endif -%}
 
-    {%- if _sources | length == 0 -%}
-        {{ exceptions.raise_compiler_error(
-            'build_fact: one of source_model, source_seed, or source_cte is required in config.'
-        ) }}
-    {%- elif _sources | length > 1 -%}
-        {{ exceptions.raise_compiler_error(
-            'build_fact: only one source option is allowed, got: ' ~ _sources | join(', ')
-        ) }}
+    {%- if execute -%}
+        {%- if _sources | length == 0 -%}
+            {{ exceptions.raise_compiler_error(
+                'build_fact: one of source_model, source_seed, or source_cte is required.'
+            ) }}
+        {%- elif _sources | length > 1 -%}
+            {{ exceptions.raise_compiler_error(
+                'build_fact: only one source option is allowed, got: ' ~ _sources | join(', ')
+            ) }}
+        {%- endif -%}
     {%- endif -%}
 
-    {%- set sk_config  = config['surrogate_key'] -%}
-    {%- set sk_columns = sk_config['columns'] -%}
+    {%- set sk_columns = sk_config.get('columns', []) -%}
     {%- set sk_alias   = sk_config.get('alias', this.identifier ~ '_key') -%}
-    {%- set dimensions = config.get('dimensions', []) -%}
-    {%- set columns    = config.get('columns', []) -%}
-    {%- set dedup      = config.get('deduplicate', none) -%}
 
     {%- set _staging_audit = ['_loaded_at', '_source_name', '_source_table'] -%}
 
