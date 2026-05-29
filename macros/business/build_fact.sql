@@ -195,22 +195,22 @@ joined as (
     select
 
         base.*,
-        {%- for dim_rel in dimensions %}
+        {% for dim_rel in dimensions %}
         {%- set _join_alias = '_dim_' ~ loop.index0 -%}
         {%- set _key        = dim_rel.get('key',   dim_rel['dim'] ~ '_key') -%}
         {%- set _alias      = dim_rel.get('alias', _key) -%}
         {{ _join_alias }}.{{ _key }}{% if _alias != _key %} as {{ _alias }}{% endif %}{% if not loop.last %},{% endif %}
-        {%- endfor %}
+        {% endfor %}
 
     from base
-    {%- for dim_rel in dimensions %}
+    {% for dim_rel in dimensions %}
     {%- set _join_alias = '_dim_' ~ loop.index0 -%}
     {%- set _fk         = dim_rel['fk'] -%}
     {%- set _dim_fk     = dim_rel.get('dim_fk', _fk) -%}
     {%- set _fk_cast    = dim_rel.get('fk_cast', none) -%}
     left join {{ ref(dim_rel['dim']) }} {{ _join_alias }}
         on {% if _fk_cast %}cast(base.{{ _fk }} as {{ _fk_cast }}){% else %}base.{{ _fk }}{% endif %} = {{ _join_alias }}.{{ _dim_fk }}
-    {%- endfor %}
+    {% endfor %}
 
 ),
 
