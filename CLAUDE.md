@@ -155,9 +155,9 @@ For each event or transaction the captain wants to measure:
    -- depends_on: {{ ref('dim_<entity>') }}
    -- depends_on: {{ ref('dim_date') }}
 
-   {%- set fct_source -%}
+   {% set fct_source %}
    source_cte: <final_cte_name>
-   {%- endset -%}
+   {% endset %}
 
    with
    ...
