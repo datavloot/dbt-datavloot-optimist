@@ -1,7 +1,7 @@
 # Workflow and conventions — optimist-toolkit
 
-Single source of truth for all consuming projects. Referenced from each project's own `CLAUDE.md`
-via `dbt_packages/optimist/CLAUDE.md` after `dbt deps`.
+Single source of truth for all consuming projects. Referenced from each project's own `data-instructions.md`
+via `dbt_packages/optimist/data-instructions.md` after `dbt deps`.
 
 ---
 
