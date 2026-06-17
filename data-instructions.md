@@ -405,3 +405,20 @@ in `dbt_project.yml`.
 - Before joining a dimension to a fact: confirm which column maps to which
 - When a source column name is ambiguous: ask, don't assume
 - When a business rule could go multiple ways: surface the options, let the captain decide
+
+---
+
+## Scheduling and automation
+
+By default, assets are materialised manually in the Dagster UI. To run pipelines automatically, Dagster provides two mechanisms:
+
+**Schedules** — trigger a set of assets on a cron interval (e.g. nightly at 02:00).
+→ [docs.dagster.io/guides/automate/schedules](https://docs.dagster.io/guides/automate/schedules)
+
+**Sensors** — trigger assets in response to an event (e.g. a new file landing, an API update, a row count threshold).
+→ [docs.dagster.io/guides/automate/sensors](https://docs.dagster.io/guides/automate/sensors)
+
+**Declarative automation** — let Dagster decide when to materialise based on asset freshness policies and upstream changes, without writing explicit schedules or sensors.
+→ [docs.dagster.io/guides/automate/declarative-automation](https://docs.dagster.io/guides/automate/declarative-automation)
+
+Schedules and sensors are defined in the project's `definitions.py` alongside the existing assets. Ask the captain how frequently each source is expected to update — that drives which approach fits.
