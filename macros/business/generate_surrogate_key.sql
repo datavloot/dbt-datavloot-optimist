@@ -5,6 +5,10 @@
     column does not nullify the entire key. Columns are separated by '||' to reduce
     the chance of collisions between adjacent values.
 
+    Dispatched via adapter.dispatch, so a project can override the key generation
+    strategy (e.g. a non-hash key for dim_date) by defining its own
+    `optimist__generate_surrogate_key` macro — no need to fork the package.
+
     Usage:
         {{ optimist.generate_surrogate_key(['order_id', 'line_id']) }} as order_line_key
 
@@ -13,6 +17,10 @@
 #}
 
 {%- macro generate_surrogate_key(columns) -%}
+    {{ return(adapter.dispatch('generate_surrogate_key', 'optimist')(columns)) }}
+{%- endmacro -%}
+
+{%- macro default__generate_surrogate_key(columns) -%}
     md5(
         concat_ws(
             '||',
