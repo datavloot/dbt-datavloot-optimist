@@ -6,6 +6,27 @@
     (populated at compile time). Any key present in the inline dict takes
     precedence over model.meta.
 
+    ── Surrogate key naming ───────────────────────────────────────────────────────
+
+    The surrogate key column defaults to optimist.dim_key_name(<model name>) — the
+    model name with a leading "dim_" stripped and "_key" appended, e.g. dim_employee
+    defaults to employee_key. build_fact()'s `dimensions:` relations default to that
+    same name when pulling this dim's key into a fact, so the column is named
+    identically on both sides unless you override `surrogate_key.alias`.
+
+    ── Composite (multi-column) natural keys ─────────────────────────────────────
+
+    `surrogate_key.columns` already accepts more than one column — pass a list to
+    hash them together when no single column uniquely identifies a row, e.g. a
+    vessel that's only unique per [name, type]:
+
+        surrogate_key:
+          columns: [name, type]
+          # alias omitted -> defaults to vessel_key
+
+    A fact joining to a dimension keyed this way matches build_fact's `fk`/`dim_fk`
+    as lists of the same length — see build_fact's docstring.
+
     ── Usage ─────────────────────────────────────────────────────────────────────
 
     In the model SQL file, pass only the source. The macro merges it with the
@@ -24,19 +45,20 @@
             meta:
               surrogate_key:
                 columns: [mmsi]
-                alias: dim_vessel_key
+                # alias omitted -> defaults to vessel_key
               columns:
                 - mmsi
                 - vessel_name
 
-    For dimensions that open a CTE chain themselves (e.g. dim_date, dim_time):
+    For dimensions that open a CTE chain themselves (e.g. one built from a generated
+    spine, or requiring multi-step prep before the surrogate key can be computed):
 
-        -- dim_date.sql
+        -- dim_enriched.sql
         {%- set dim_source -%}
-        source_cte: date_spine
+        source_cte: prepared
         {%- endset -%}
 
-        with date_spine as (...)
+        with prepared as (...)
 
         {{ optimist.build_dimension(fromyaml(dim_source)) }}
 
@@ -54,8 +76,6 @@
         surrogate_key  (dict, required) — columns list + optional alias
         deduplicate    (dict, optional) — partition_by + optional order_by
         columns        (list, optional) — explicit output columns; omit to select all
-
-    See models/business/_dim_config_template.yml for the annotated full template.
 #}
 
 {%- macro build_dimension(dim_config=none) -%}
@@ -95,7 +115,7 @@
     {%- endif -%}
 
     {%- set sk_columns = sk_config.get('columns', []) -%}
-    {%- set sk_alias   = sk_config.get('alias', this.identifier ~ '_key') -%}
+    {%- set sk_alias   = sk_config.get('alias', optimist.dim_key_name(this.identifier)) -%}
 
     {#- Staging audit columns to exclude when selecting * from a staged source -#}
     {%- set _staging_audit = ['_loaded_at', '_source_name', '_source_table'] -%}

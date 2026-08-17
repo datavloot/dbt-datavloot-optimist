@@ -37,7 +37,7 @@ Edit `models/source/_sources.yml`. Add one source block per source system, with 
 entry per raw table the captain wants to use.
 
 Ask the captain: how recently should each source have received data? Configure `freshness`
-and `loaded_at_field` accordingly (see Step 7 — Data quality).
+and `loaded_at_field` accordingly (see Step 8 — Data quality).
 
 Full template and freshness config options: `models/source/_sources.yml`
 
@@ -87,7 +87,7 @@ key column(s) and add a `unique` test on that column in `_schema.yml`:
     - unique     # enforces the deduplication guarantee
 ```
 
-After creating each staging model, ask the captain about data quality expectations — see **Step 7**.
+After creating each staging model, ask the captain about data quality expectations — see **Step 8**.
 
 Reference: `dbt_packages/optimist/docs/source-layer.md`
 
@@ -123,7 +123,7 @@ For each entity the captain cares about (person, product, location, vessel, etc.
    - name: dim_<entity>
      description: ""
      columns:
-       - name: dim_<entity>_key
+       - name: <entity>_key
          description: "Surrogate key; MD5 hash of <natural_key>."
        - name: <natural_key>
          description: ""
@@ -131,16 +131,27 @@ For each entity the captain cares about (person, product, location, vessel, etc.
        meta:
          surrogate_key:
            columns: [<natural_key>]
-           alias: dim_<entity>_key
+           # alias omitted -> defaults to <entity>_key (strip "dim_" off the model name)
          columns:
            - <natural_key>
            - <attribute_column>
    ```
 
-`dim_date` and `dim_time` ship with the toolkit — reference them with `ref('dim_date')` and
-`ref('dim_time')` without creating new models.
+   The surrogate key column defaults to `optimist.dim_key_name(dim_<entity>)` — the model name
+   with `dim_` stripped, e.g. `dim_employee` → `employee_key`. Leave `alias` off unless you need
+   a different name; a fact joining to this dim will default to pulling the key in under that
+   same name (see Step 5). If a single column doesn't uniquely identify a row, pass a list to
+   `surrogate_key.columns` — see `dbt_packages/optimist/docs/business-layer.md` for a composite
+   natural key example.
 
-After creating each dimension, ask the captain about data quality expectations — see **Step 7**.
+3. `dim_date` and `dim_time` are already scaffolded as `models/business/dimensions/dim_date.sql`
+   / `dim_time.sql`, calling `optimist.build_dim_date()` / `optimist.build_dim_time()`. Reference
+   them with `ref('dim_date')` / `ref('dim_time')` like any other dimension — no new model
+   needed. If the captain needs a different date range or time granularity (e.g. second-level
+   instead of minute), ask, then set `dim_date_start`/`dim_date_end`/`dim_time_grain` in
+   `dbt_project.yml` vars rather than editing the model files.
+
+After creating each dimension, ask the captain about data quality expectations — see **Step 8**.
 
 Full config reference: `dbt_packages/optimist/macros/business/build_dimension.sql` (docstring)
 
@@ -181,29 +192,72 @@ For each event or transaction the captain wants to measure:
          dimensions:
            - dim: dim_<entity>
              fk: <fk_column>
-             key: dim_<entity>_key
+             # key/alias omitted -> defaults to <entity>_key
            - dim: dim_date
              fk: <timestamp_column>
              dim_fk: date_day
              fk_cast: date
-             key: dim_date_key
-             alias: <event>_date_key
+             alias: <event>_date_key   # required: dim_date's default (date_key) would collide
+                                       # if it's ever joined more than once in the same fact
          columns:
            - <grain_column>
            - <measure_column>
    ```
 
-After creating each fact, ask the captain about data quality expectations — see **Step 7**.
+   Leave `key`/`alias` off a dimension relation unless the dim is joined more than once (build_fact
+   raises a compiler error if two relations would collide on the same default) or you want a more
+   descriptive output name. If the dim's natural key spans multiple columns, `fk`/`dim_fk` also
+   accept a list — see `dbt_packages/optimist/docs/business-layer.md` for a composite key example.
+
+After creating each fact, ask the captain about data quality expectations — see **Step 8**.
 
 Full config reference: `dbt_packages/optimist/macros/business/build_fact.sql` (docstring)
 
-### Step 6 — Document
+### Step 6 — Build datasets (optional)
+
+If the captain wants a flat, denormalized table on top of facts/dims (a "one big table" for a
+BI tool, spreadsheet export, or similar) rather than a dimensional model, use `build_dataset`.
+This is *not* a replacement for Steps 4-5 — build the dimensional model first, then flatten it
+here if the captain specifically asks for a flat output.
+
+1. Prepare the join/flattening logic yourself in a `source_cte` (build_dataset does not join
+   dimensions for you), then create `models/business/datasets/dataset_<name>.sql`:
+   ```sql
+   {%- set dataset_source -%}
+   source_cte: <final_cte_name>
+   {%- endset -%}
+
+   with
+   ...
+   <final_cte_name> as (...)
+
+   {{ optimist.build_dataset(fromyaml(dataset_source)) }}
+   ```
+2. Add an entry to `models/business/datasets/_dataset_configs.yml` with column descriptions
+   and a `config.meta.columns` list — **required**, unlike `build_dimension`/`build_fact`:
+   ```yaml
+   - name: dataset_<name>
+     description: ""
+     columns:
+       - name: <column>
+         description: ""
+     config:
+       meta:
+         columns:
+           - <column>
+           - <column>
+   ```
+
+After creating each dataset, ask the captain about data quality expectations — see **Step 8**.
+
+Full config reference: `dbt_packages/optimist/macros/business/build_dataset.sql` (docstring)
+
+### Step 7 — Document
 
 Add `columns` entries with descriptions to every model in the relevant `_configs.yml` or
-`_schema.yml`. Follow the pattern used in `dim_date` and `dim_time` inside
-`dbt_packages/optimist/models/business/dimensions/_dim_configs.yml`.
+`_schema.yml`.
 
-### Step 7 — Data quality tests
+### Step 8 — Data quality tests
 
 After creating **each model**, ask the captain the following questions and configure tests
 based on their answers. Do not skip this step — undocumented expectations become silent failures.
@@ -236,12 +290,12 @@ columns:
       - accepted_values:
           values: ['pending', 'confirmed', 'cancelled']
 
-  - name: dim_customer_key
+  - name: customer_key
     data_tests:
       - not_null
       - relationships:
           to: ref('dim_customer')
-          field: dim_customer_key
+          field: customer_key
 ```
 
 #### Singular tests — for custom logic, one SQL file per test in `tests/`
@@ -361,11 +415,16 @@ left join sea_state_categories s
 | Staging | `stg_<source>__<table>` | `stg_harbor__vessels` |
 | Dimension | `dim_<entity>` | `dim_vessel` |
 | Fact | `fct_<event>` | `fct_journey` |
-| Surrogate key | `<model>_key` | `dim_vessel_key`, `fct_journey_key` |
+| Dataset | `dataset_<name>` | `dataset_vessel_activity` |
+| Dimension surrogate key | `<entity>_key` (strip `dim_` off the model name) | `dim_vessel` → `vessel_key` |
+| Fact surrogate key | `<model>_key` | `fct_journey` → `fct_journey_key` |
 
 - Double underscore (`__`) separates the source name from the table name in staging models.
 - Dimension entities are singular nouns (`dim_vessel`, not `dim_vessels`).
 - Fact events are noun phrases (`fct_orders`, `fct_port_calls`).
+- A fact pulling in a dimension's key defaults to the *same* column name as the dimension's own
+  key (`optimist.dim_key_name`) — don't rename it via `alias` unless disambiguating multiple
+  joins to the same dimension, or the automatic matching a BI tool relies on breaks.
 - All config lives in `_configs.yml` files — no logic in SQL files.
 
 ---
@@ -385,10 +444,15 @@ models/
 └── business/
     ├── dimensions/
     │   ├── _dim_configs.yml          # all dimension configs and tests — edit here
-    │   └── dim_<entity>.sql          # one file per dimension
-    └── facts/
-        ├── _fct_configs.yml          # all fact configs and tests — edit here
-        └── fct_<event>.sql           # one file per fact
+    │   ├── dim_date.sql              # {{ optimist.build_dim_date() }} — already scaffolded
+    │   ├── dim_time.sql              # {{ optimist.build_dim_time() }} — already scaffolded
+    │   └── dim_<entity>.sql          # one file per dimension you add
+    ├── facts/
+    │   ├── _fct_configs.yml          # all fact configs and tests — edit here
+    │   └── fct_<event>.sql           # one file per fact
+    └── datasets/                     # optional — only if the captain asks for a flat table
+        ├── _dataset_configs.yml      # all dataset configs and tests — edit here
+        └── dataset_<name>.sql        # one file per dataset
 tests/
 └── assert_<model>_<description>.sql  # one file per custom singular test
 ```

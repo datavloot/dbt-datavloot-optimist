@@ -32,12 +32,10 @@
               dimensions:
                 - dim: dim_vessel
                   fk: mmsi
-                  key: dim_vessel_key
                 - dim: dim_date
                   fk: departure_at
                   dim_fk: date_day
                   fk_cast: date
-                  key: dim_date_key
                   alias: departure_date_key
               columns:
                 - journey_id
@@ -61,23 +59,41 @@
 
     ── Dimension relationships ───────────────────────────────────────────────────
 
-    Each entry in `dimensions` generates a LEFT JOIN and pulls the dim surrogate key.
+    Each entry in `dimensions` generates a LEFT JOIN and pulls the dim's surrogate key.
+    `key` defaults to optimist.dim_key_name(dim) — e.g. dim: dim_vessel defaults to
+    vessel_key — which is also the name build_dimension() gives that column by default
+    on the dim side, so in the common case you don't need to specify `key` at all.
 
         dimensions:
           - dim: dim_vessel           # model to join (ref())
-            fk: vessel_id            # FK column in the source
-            key: dim_vessel_key      # surrogate key to pull from dim
-            alias: dim_vessel_key    # output alias (default: same as key)
+            fk: vessel_id             # FK column in the source
+            # key/alias omitted -> defaults to vessel_key
 
           - dim: dim_date
-            fk: departure_at         # FK in source (may need casting)
-            dim_fk: date_day         # matching column in dim (default: same as fk)
-            fk_cast: date            # cast fk before joining (optional)
-            key: dim_date_key
-            alias: departure_date_key
+            fk: departure_at          # FK in source (may need casting)
+            dim_fk: date_day          # matching column in dim (default: same as fk)
+            fk_cast: date             # cast fk before joining (optional)
+            alias: departure_date_key # output alias (default: same as key)
 
     The same dimension can appear multiple times (e.g. dim_date for departure and
-    arrival) — each gets a unique join alias automatically.
+    arrival) — each gets a unique join alias automatically, but you must give each
+    occurrence an explicit `alias` in that case: build_fact raises a compiler error
+    if two dimension relations would otherwise produce the same output column.
+
+    ── Composite (multi-column) keys ─────────────────────────────────────────────
+
+    `fk`, `dim_fk`, and `fk_cast` each accept a list instead of a single column, for
+    joining to a dimension whose natural key spans multiple columns (build_dimension's
+    surrogate_key.columns already supports this on the dim side — see its docstring):
+
+        - dim: dim_vessel_model      # unique per [name, type] on the dim side
+          fk: [vessel_name, vessel_type]
+          dim_fk: [name, type]       # defaults to same list as fk if omitted
+          # key/alias omitted -> defaults to vessel_model_key
+
+    `fk` and `dim_fk` must resolve to the same number of columns. `fk_cast`, if given
+    as a list, must match that length too (one cast per column); given as a single
+    string, it applies to every column.
 #}
 
 {%- macro build_fact(fct_config=none) -%}
@@ -121,13 +137,68 @@
 
     {%- set _staging_audit = ['_loaded_at', '_source_name', '_source_table'] -%}
 
-    {#- Collect resolved dim key aliases up-front for use in * exclude list -#}
+    {#- Normalize each dimension relation up front: fk/dim_fk/fk_cast to equal-length lists,
+        key/alias to their resolved names. Used both for the * exclude list and the joined CTE. -#}
+    {%- set _dim_rels = [] -%}
     {%- set _dim_key_aliases = [] -%}
     {%- for dim_rel in dimensions -%}
-        {%- set _key   = dim_rel.get('key',   dim_rel['dim'] ~ '_key') -%}
+        {%- set _fk      = dim_rel['fk'] -%}
+        {%- set _fk_list = [_fk] if _fk is string else _fk -%}
+        {%- set _dim_fk      = dim_rel.get('dim_fk', _fk) -%}
+        {%- set _dim_fk_list = [_dim_fk] if _dim_fk is string else _dim_fk -%}
+        {%- set _fk_cast_raw = dim_rel.get('fk_cast', none) -%}
+
+        {%- if execute -%}
+            {%- if (_fk_list | length) != (_dim_fk_list | length) -%}
+                {{ exceptions.raise_compiler_error(
+                    'build_fact: fk and dim_fk must have the same number of columns for dim `' ~ dim_rel['dim'] ~
+                    '` (got ' ~ (_fk_list | length) ~ ' and ' ~ (_dim_fk_list | length) ~ ').'
+                ) }}
+            {%- endif -%}
+            {%- if _fk_cast_raw is not none and _fk_cast_raw is not string and (_fk_cast_raw | length) != (_fk_list | length) -%}
+                {{ exceptions.raise_compiler_error(
+                    'build_fact: fk_cast list must be the same length as fk for dim `' ~ dim_rel['dim'] ~ '`.'
+                ) }}
+            {%- endif -%}
+        {%- endif -%}
+
+        {%- if _fk_cast_raw is none -%}
+            {%- set _fk_cast_list = [none] * (_fk_list | length) -%}
+        {%- elif _fk_cast_raw is string -%}
+            {%- set _fk_cast_list = [_fk_cast_raw] * (_fk_list | length) -%}
+        {%- else -%}
+            {%- set _fk_cast_list = _fk_cast_raw -%}
+        {%- endif -%}
+
+        {%- set _key   = dim_rel.get('key', optimist.dim_key_name(dim_rel['dim'])) -%}
         {%- set _alias = dim_rel.get('alias', _key) -%}
         {%- do _dim_key_aliases.append(_alias) -%}
+
+        {%- do _dim_rels.append({
+            'dim': dim_rel['dim'],
+            'fk_list': _fk_list,
+            'dim_fk_list': _dim_fk_list,
+            'fk_cast_list': _fk_cast_list,
+            'key': _key,
+            'alias': _alias,
+        }) -%}
     {%- endfor -%}
+
+    {#- A collision here would otherwise emit two columns with the same name -#}
+    {%- set _seen = [] -%}
+    {%- set _dupes = [] -%}
+    {%- for a in _dim_key_aliases -%}
+        {%- if a in _seen and a not in _dupes -%}
+            {%- do _dupes.append(a) -%}
+        {%- endif -%}
+        {%- do _seen.append(a) -%}
+    {%- endfor -%}
+    {%- if execute and (_dupes | length) > 0 -%}
+        {{ exceptions.raise_compiler_error(
+            'build_fact: duplicate output column(s) ' ~ (_dupes | join(', ')) ~
+            ' from multiple dimension joins — add an explicit `alias:` to each to disambiguate.'
+        ) }}
+    {%- endif -%}
 
     {%- set _final_from = 'joined' if dimensions else 'base' -%}
 
@@ -195,21 +266,22 @@ joined as (
     select
 
         base.*,
-        {% for dim_rel in dimensions %}
+        {% for r in _dim_rels %}
         {%- set _join_alias = '_dim_' ~ loop.index0 -%}
-        {%- set _key        = dim_rel.get('key',   dim_rel['dim'] ~ '_key') -%}
-        {%- set _alias      = dim_rel.get('alias', _key) -%}
-        {{ _join_alias }}.{{ _key }}{% if _alias != _key %} as {{ _alias }}{% endif %}{% if not loop.last %},{% endif %}
+        {{ _join_alias }}.{{ r.key }}{% if r.alias != r.key %} as {{ r.alias }}{% endif %}{% if not loop.last %},{% endif %}
         {% endfor %}
 
     from base
-    {% for dim_rel in dimensions %}
+    {% for r in _dim_rels %}
     {%- set _join_alias = '_dim_' ~ loop.index0 -%}
-    {%- set _fk         = dim_rel['fk'] -%}
-    {%- set _dim_fk     = dim_rel.get('dim_fk', _fk) -%}
-    {%- set _fk_cast    = dim_rel.get('fk_cast', none) -%}
-    left join {{ ref(dim_rel['dim']) }} {{ _join_alias }}
-        on {% if _fk_cast %}cast(base.{{ _fk }} as {{ _fk_cast }}){% else %}base.{{ _fk }}{% endif %} = {{ _join_alias }}.{{ _dim_fk }}
+    {%- set _on_parts = [] -%}
+    {%- for i in range(r.fk_list | length) -%}
+        {%- set _cast = r.fk_cast_list[i] -%}
+        {%- set _base_expr = ('cast(base.' ~ r.fk_list[i] ~ ' as ' ~ _cast ~ ')') if _cast else ('base.' ~ r.fk_list[i]) -%}
+        {%- do _on_parts.append(_base_expr ~ ' = ' ~ _join_alias ~ '.' ~ r.dim_fk_list[i]) -%}
+    {%- endfor -%}
+    left join {{ ref(r.dim) }} {{ _join_alias }}
+        on {{ _on_parts | join(' and ') }}
     {% endfor %}
 
 ),
