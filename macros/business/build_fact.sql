@@ -20,7 +20,7 @@
         ...
         journeys as (...)
 
-        {{ optimist.build_fact(fromyaml(fct_source)) }}
+        {{ datavloot_optimist.build_fact(fromyaml(fct_source)) }}
 
         # _fct_configs.yml
         - name: fct_journey
@@ -60,7 +60,7 @@
     ── Dimension relationships ───────────────────────────────────────────────────
 
     Each entry in `dimensions` generates a LEFT JOIN and pulls the dim's surrogate key.
-    `key` defaults to optimist.dim_key_name(dim) — e.g. dim: dim_vessel defaults to
+    `key` defaults to datavloot_optimist.dim_key_name(dim) — e.g. dim: dim_vessel defaults to
     vessel_key — which is also the name build_dimension() gives that column by default
     on the dim side, so in the common case you don't need to specify `key` at all.
 
@@ -170,7 +170,7 @@
             {%- set _fk_cast_list = _fk_cast_raw -%}
         {%- endif -%}
 
-        {%- set _key   = dim_rel.get('key', optimist.dim_key_name(dim_rel['dim'])) -%}
+        {%- set _key   = dim_rel.get('key', datavloot_optimist.dim_key_name(dim_rel['dim'])) -%}
         {%- set _alias = dim_rel.get('alias', _key) -%}
         {%- do _dim_key_aliases.append(_alias) -%}
 
@@ -293,7 +293,7 @@ final as (
     select
 
         -- surrogate key
-        {{ optimist.generate_surrogate_key(sk_columns) }} as {{ sk_alias }},
+        {{ datavloot_optimist.generate_surrogate_key(sk_columns) }} as {{ sk_alias }},
 
         -- dimension keys
         {%- for _alias in _dim_key_aliases %}

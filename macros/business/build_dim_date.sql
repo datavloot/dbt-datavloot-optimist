@@ -4,7 +4,7 @@
     the package. Call it from your own model file:
 
         -- models/business/dimensions/dim_date.sql
-        {{ optimist.build_dim_date() }}
+        {{ datavloot_optimist.build_dim_date() }}
 
     date_key IS the surrogate key — a plain YYYYMMDD integer, not a hash. It's produced
     by generate_date_key() (see that macro's docstring), so any fact computing its own
@@ -12,7 +12,7 @@
 
     Date range is configurable via arguments or dbt vars (an argument wins if given):
 
-        {{ optimist.build_dim_date(start_date='2018-01-01', end_date='2040-12-31') }}
+        {{ datavloot_optimist.build_dim_date(start_date='2018-01-01', end_date='2040-12-31') }}
 
         # dbt_project.yml
         vars:
@@ -35,7 +35,7 @@ with date_spine as (
 
     select
 
-        {{ optimist.generate_date_key('gs') }}                          as date_key,
+        {{ datavloot_optimist.generate_date_key('gs') }}                          as date_key,
         cast(gs as date)                                                as date_day,
 
         year(cast(gs as date))                                          as year,

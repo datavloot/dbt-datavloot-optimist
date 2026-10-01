@@ -31,7 +31,7 @@
 
         )
 
-        {{ optimist.build_dataset(fromyaml(dataset_source)) }}
+        {{ datavloot_optimist.build_dataset(fromyaml(dataset_source)) }}
 
         # _dataset_configs.yml
         - name: dataset_vessel_activity

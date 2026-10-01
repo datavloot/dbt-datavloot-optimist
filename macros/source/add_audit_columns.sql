@@ -5,7 +5,7 @@
 
         select
             my_col,
-            {{ optimist.add_audit_columns(source_name='my_source', table_name='my_table') }}
+            {{ datavloot_optimist.add_audit_columns(source_name='my_source', table_name='my_table') }}
         from ...
 
     Produced columns:

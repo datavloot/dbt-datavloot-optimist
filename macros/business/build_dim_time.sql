@@ -4,7 +4,7 @@
     package. Call it from your own model file:
 
         -- models/business/dimensions/dim_time.sql
-        {{ optimist.build_dim_time() }}
+        {{ datavloot_optimist.build_dim_time() }}
 
     time_key IS the surrogate key — seconds elapsed since midnight as a plain integer,
     not a hash. It's stable across grain (minute grain: multiples of 60; second grain:
@@ -13,7 +13,7 @@
 
     Grain resolves as: argument, else the `dim_time_grain` var, else 'minute':
 
-        {{ optimist.build_dim_time(grain='second') }}     -- 86 400 rows, one per second
+        {{ datavloot_optimist.build_dim_time(grain='second') }}     -- 86 400 rows, one per second
 
         # dbt_project.yml
         vars:

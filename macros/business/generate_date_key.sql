@@ -9,7 +9,7 @@
     matches dim_date.date_key for the same calendar date.
 
     Usage:
-        {{ optimist.generate_date_key('departure_at') }} as departure_date_key
+        {{ datavloot_optimist.generate_date_key('departure_at') }} as departure_date_key
 
     Arguments:
         date_expr (string) — a date or timestamp column/expression, unquoted

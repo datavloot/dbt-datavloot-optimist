@@ -8,7 +8,7 @@
 
     ── Surrogate key naming ───────────────────────────────────────────────────────
 
-    The surrogate key column defaults to optimist.dim_key_name(<model name>) — the
+    The surrogate key column defaults to datavloot_optimist.dim_key_name(<model name>) — the
     model name with a leading "dim_" stripped and "_key" appended, e.g. dim_employee
     defaults to employee_key. build_fact()'s `dimensions:` relations default to that
     same name when pulling this dim's key into a fact, so the column is named
@@ -37,7 +37,7 @@
         source_model: stg_harbor__vessels
         {%- endset -%}
 
-        {{ optimist.build_dimension(fromyaml(dim_source)) }}
+        {{ datavloot_optimist.build_dimension(fromyaml(dim_source)) }}
 
         # _dim_configs.yml
         - name: dim_vessel
@@ -60,7 +60,7 @@
 
         with prepared as (...)
 
-        {{ optimist.build_dimension(fromyaml(dim_source)) }}
+        {{ datavloot_optimist.build_dimension(fromyaml(dim_source)) }}
 
     ── Source options (one required — pass inline so dbt can discover the dependency) ──
 
@@ -115,7 +115,7 @@
     {%- endif -%}
 
     {%- set sk_columns = sk_config.get('columns', []) -%}
-    {%- set sk_alias   = sk_config.get('alias', optimist.dim_key_name(this.identifier)) -%}
+    {%- set sk_alias   = sk_config.get('alias', datavloot_optimist.dim_key_name(this.identifier)) -%}
 
     {#- Staging audit columns to exclude when selecting * from a staged source -#}
     {%- set _staging_audit = ['_loaded_at', '_source_name', '_source_table'] -%}
@@ -186,7 +186,7 @@ final as (
     select
 
         -- surrogate key
-        {{ optimist.generate_surrogate_key(sk_columns) }} as {{ sk_alias }},
+        {{ datavloot_optimist.generate_surrogate_key(sk_columns) }} as {{ sk_alias }},
 
         -- business columns
         {%- if columns %}
