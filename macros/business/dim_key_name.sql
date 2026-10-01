@@ -12,8 +12,8 @@
     normally called directly, but nothing stops a model from using it.
 
     Usage:
-        {{ datavloot_optimist.dim_key_name('dim_employee') }}   -> employee_key
-        {{ datavloot_optimist.dim_key_name('dim_date') }}       -> date_key
+        {{ optimist.dim_key_name('dim_employee') }}   -> employee_key
+        {{ optimist.dim_key_name('dim_date') }}       -> date_key
 
     Arguments:
         dim_model_name (string) — a dimension model name, conventionally prefixed "dim_".

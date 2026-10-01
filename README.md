@@ -1,11 +1,11 @@
-# datavloot_optimist
+# optimist (datavloot)
 
 dbt macros for building a Kimball-style warehouse in two layers:
 
 - **source layer**: `stage_source`, `add_audit_columns`
 - **business layer**: `build_dimension`, `build_fact`, `build_dataset`, `build_dim_date`, `build_dim_time`, plus key helpers (`generate_surrogate_key`, `generate_date_key`, `dim_key_name`)
 
-The modelling conventions are in [data-instructions.md](data-instructions.md). After `dbt deps`, consuming projects can read them at `dbt_packages/datavloot_optimist/data-instructions.md`.
+The modelling conventions are in [data-instructions.md](data-instructions.md). After `dbt deps`, consuming projects can read them at `dbt_packages/optimist/data-instructions.md`.
 
 ## Installation
 
@@ -21,7 +21,7 @@ Then run `dbt deps`. Requires dbt-core 1.8 or later.
 
 ```sql
 -- models/source/stg_crm__customers.sql
-{{ datavloot_optimist.stage_source('crm', 'customers') }}
+{{ optimist.stage_source('crm', 'customers') }}
 ```
 
 The docstring at the top of each macro in [macros/](macros/) documents its arguments.

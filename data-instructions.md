@@ -1,7 +1,7 @@
 # Workflow and conventions — optimist-toolkit
 
 Single source of truth for all consuming projects. Referenced from each project's own `data-instructions.md`
-via `dbt_packages/datavloot_optimist/data-instructions.md` after `dbt deps`.
+via `dbt_packages/optimist/data-instructions.md` after `dbt deps`.
 
 ---
 
@@ -47,7 +47,7 @@ For each raw table, create a staging model.
 
 **`models/source/stg_<source>__<table>.sql`**:
 ```sql
-{{ datavloot_optimist.stage_source('<source>', '<table>') }}
+{{ optimist.stage_source('<source>', '<table>') }}
 ```
 
 Then add a model entry to `models/source/_schema.yml` with column descriptions and `data_tests`.
@@ -66,7 +66,7 @@ The default is `incremental`; alternatives for sources without a reliable update
 1. A `unique_key` config so dbt upserts instead of appending:
    ```sql
    {{ config(unique_key='<natural_key>') }}
-   {{ datavloot_optimist.stage_source('<source>', '<table>', incremental_column='<updated_at_col>') }}
+   {{ optimist.stage_source('<source>', '<table>', incremental_column='<updated_at_col>') }}
    ```
 2. Ask the captain: which column marks when a row was last updated? (e.g. `updated_at`, `modified_at`, `ingested_at`)
 
@@ -75,7 +75,7 @@ The default is `incremental`; alternatives for sources without a reliable update
 key column(s) and add a `unique` test on that column in `_schema.yml`:
 
 ```sql
-{{ datavloot_optimist.stage_source('<source>', '<table>', deduplicate_by=['<natural_key>'], order_by='<updated_at_col> desc') }}
+{{ optimist.stage_source('<source>', '<table>', deduplicate_by=['<natural_key>'], order_by='<updated_at_col> desc') }}
 ```
 
 ```yaml
@@ -89,7 +89,7 @@ key column(s) and add a `unique` test on that column in `_schema.yml`:
 
 After creating each staging model, ask the captain about data quality expectations — see **Step 8**.
 
-Reference: `dbt_packages/datavloot_optimist/docs/source-layer.md`
+Reference: `dbt_packages/optimist/docs/source-layer.md`
 
 ### Step 3 — Add seed data (optional)
 
@@ -115,7 +115,7 @@ For each entity the captain cares about (person, product, location, vessel, etc.
    source_model: stg_<source>__<table>
    {%- endset -%}
 
-   {{ datavloot_optimist.build_dimension(fromyaml(dim_source)) }}
+   {{ optimist.build_dimension(fromyaml(dim_source)) }}
    ```
 2. Add an entry to `models/business/dimensions/_dim_configs.yml` with column descriptions,
    `data_tests`, and a `config.meta` block with the build config:
@@ -137,15 +137,15 @@ For each entity the captain cares about (person, product, location, vessel, etc.
            - <attribute_column>
    ```
 
-   The surrogate key column defaults to `datavloot_optimist.dim_key_name(dim_<entity>)` — the model name
+   The surrogate key column defaults to `optimist.dim_key_name(dim_<entity>)` — the model name
    with `dim_` stripped, e.g. `dim_employee` → `employee_key`. Leave `alias` off unless you need
    a different name; a fact joining to this dim will default to pulling the key in under that
    same name (see Step 5). If a single column doesn't uniquely identify a row, pass a list to
-   `surrogate_key.columns` — see `dbt_packages/datavloot_optimist/docs/business-layer.md` for a composite
+   `surrogate_key.columns` — see `dbt_packages/optimist/docs/business-layer.md` for a composite
    natural key example.
 
 3. `dim_date` and `dim_time` are already scaffolded as `models/business/dimensions/dim_date.sql`
-   / `dim_time.sql`, calling `datavloot_optimist.build_dim_date()` / `datavloot_optimist.build_dim_time()`. Reference
+   / `dim_time.sql`, calling `optimist.build_dim_date()` / `optimist.build_dim_time()`. Reference
    them with `ref('dim_date')` / `ref('dim_time')` like any other dimension — no new model
    needed. If the captain needs a different date range or time granularity (e.g. second-level
    instead of minute), ask, then set `dim_date_start`/`dim_date_end`/`dim_time_grain` in
@@ -153,7 +153,7 @@ For each entity the captain cares about (person, product, location, vessel, etc.
 
 After creating each dimension, ask the captain about data quality expectations — see **Step 8**.
 
-Full config reference: `dbt_packages/datavloot_optimist/macros/business/build_dimension.sql` (docstring)
+Full config reference: `dbt_packages/optimist/macros/business/build_dimension.sql` (docstring)
 
 ### Step 5 — Build facts
 
@@ -174,7 +174,7 @@ For each event or transaction the captain wants to measure:
    ...
    <final_cte_name> as (...)
 
-   {{ datavloot_optimist.build_fact(fromyaml(fct_source)) }}
+   {{ optimist.build_fact(fromyaml(fct_source)) }}
    ```
 2. Add an entry to `models/business/facts/_fct_configs.yml` with column descriptions,
    `data_tests`, and a `config.meta` block with the build config:
@@ -207,11 +207,11 @@ For each event or transaction the captain wants to measure:
    Leave `key`/`alias` off a dimension relation unless the dim is joined more than once (build_fact
    raises a compiler error if two relations would collide on the same default) or you want a more
    descriptive output name. If the dim's natural key spans multiple columns, `fk`/`dim_fk` also
-   accept a list — see `dbt_packages/datavloot_optimist/docs/business-layer.md` for a composite key example.
+   accept a list — see `dbt_packages/optimist/docs/business-layer.md` for a composite key example.
 
 After creating each fact, ask the captain about data quality expectations — see **Step 8**.
 
-Full config reference: `dbt_packages/datavloot_optimist/macros/business/build_fact.sql` (docstring)
+Full config reference: `dbt_packages/optimist/macros/business/build_fact.sql` (docstring)
 
 ### Step 6 — Build datasets (optional)
 
@@ -231,7 +231,7 @@ here if the captain specifically asks for a flat output.
    ...
    <final_cte_name> as (...)
 
-   {{ datavloot_optimist.build_dataset(fromyaml(dataset_source)) }}
+   {{ optimist.build_dataset(fromyaml(dataset_source)) }}
    ```
 2. Add an entry to `models/business/datasets/_dataset_configs.yml` with column descriptions
    and a `config.meta.columns` list — **required**, unlike `build_dimension`/`build_fact`:
@@ -250,7 +250,7 @@ here if the captain specifically asks for a flat output.
 
 After creating each dataset, ask the captain about data quality expectations — see **Step 8**.
 
-Full config reference: `dbt_packages/datavloot_optimist/macros/business/build_dataset.sql` (docstring)
+Full config reference: `dbt_packages/optimist/macros/business/build_dataset.sql` (docstring)
 
 ### Step 7 — Document
 
@@ -423,7 +423,7 @@ left join sea_state_categories s
 - Dimension entities are singular nouns (`dim_vessel`, not `dim_vessels`).
 - Fact events are noun phrases (`fct_orders`, `fct_port_calls`).
 - A fact pulling in a dimension's key defaults to the *same* column name as the dimension's own
-  key (`datavloot_optimist.dim_key_name`) — don't rename it via `alias` unless disambiguating multiple
+  key (`optimist.dim_key_name`) — don't rename it via `alias` unless disambiguating multiple
   joins to the same dimension, or the automatic matching a BI tool relies on breaks.
 - All config lives in `_configs.yml` files — no logic in SQL files.
 
@@ -444,8 +444,8 @@ models/
 └── business/
     ├── dimensions/
     │   ├── _dim_configs.yml          # all dimension configs and tests — edit here
-    │   ├── dim_date.sql              # {{ datavloot_optimist.build_dim_date() }} — already scaffolded
-    │   ├── dim_time.sql              # {{ datavloot_optimist.build_dim_time() }} — already scaffolded
+    │   ├── dim_date.sql              # {{ optimist.build_dim_date() }} — already scaffolded
+    │   ├── dim_time.sql              # {{ optimist.build_dim_time() }} — already scaffolded
     │   └── dim_<entity>.sql          # one file per dimension you add
     ├── facts/
     │   ├── _fct_configs.yml          # all fact configs and tests — edit here

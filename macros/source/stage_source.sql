@@ -29,20 +29,20 @@
 
     Usage — the entire model file can be a single line:
 
-        {{ datavloot_optimist.stage_source('my_source', 'my_table') }}
+        {{ optimist.stage_source('my_source', 'my_table') }}
 
     With explicit exclusions:
 
-        {{ datavloot_optimist.stage_source('my_source', 'my_table', exclude_columns=['ssn', 'password_hash']) }}
+        {{ optimist.stage_source('my_source', 'my_table', exclude_columns=['ssn', 'password_hash']) }}
 
     With deduplication — keep the most recently updated row per natural key:
 
-        {{ datavloot_optimist.stage_source('my_source', 'my_table', deduplicate_by=['record_id'], order_by='updated_at desc') }}
+        {{ optimist.stage_source('my_source', 'my_table', deduplicate_by=['record_id'], order_by='updated_at desc') }}
 
     With incremental loading — only process rows newer than what is already staged:
 
         {{ config(unique_key='record_id') }}
-        {{ datavloot_optimist.stage_source('my_source', 'my_table', incremental_column='updated_at') }}
+        {{ optimist.stage_source('my_source', 'my_table', incremental_column='updated_at') }}
 #}
 
 {%- macro stage_source(source_name, table_name, exclude_columns=[], deduplicate_by=[], order_by='_loaded_at desc', incremental_column=none) -%}
@@ -82,7 +82,7 @@ staged as (
         {%- endfor %}
 
         {#- Audit columns -#}
-        {{ datavloot_optimist.add_audit_columns(source_name, table_name) }}
+        {{ optimist.add_audit_columns(source_name, table_name) }}
 
     from source
 

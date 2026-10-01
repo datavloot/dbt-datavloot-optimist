@@ -7,17 +7,17 @@
 
     Dispatched via adapter.dispatch, so a project can override the key generation
     strategy (e.g. a non-hash key for dim_date) by defining its own
-    `datavloot_optimist__generate_surrogate_key` macro — no need to fork the package.
+    `optimist__generate_surrogate_key` macro — no need to fork the package.
 
     Usage:
-        {{ datavloot_optimist.generate_surrogate_key(['order_id', 'line_id']) }} as order_line_key
+        {{ optimist.generate_surrogate_key(['order_id', 'line_id']) }} as order_line_key
 
     Arguments:
         columns (list) — column names to include in the hash
 #}
 
 {%- macro generate_surrogate_key(columns) -%}
-    {{ return(adapter.dispatch('generate_surrogate_key', 'datavloot_optimist')(columns)) }}
+    {{ return(adapter.dispatch('generate_surrogate_key', 'optimist')(columns)) }}
 {%- endmacro -%}
 
 {%- macro default__generate_surrogate_key(columns) -%}

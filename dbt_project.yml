@@ -1,11 +1,11 @@
-name: 'datavloot_optimist'
+name: 'optimist'
 version: '0.1.0'
 config-version: 2
 
 require-dbt-version: [">=1.8.0", "<2.0.0"]
 
 # Only used when developing the package locally; consuming projects use their own profile.
-profile: 'datavloot_optimist'
+profile: 'optimist'
 
 macro-paths: ["macros"]
 model-paths: ["models"]
