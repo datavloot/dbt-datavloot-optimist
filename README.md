@@ -1,2 +1,4 @@
-# dbt-datavloot-optimist
-dbt package by datavloot containing all that is necessary for creating an optimist dbt project
+# optimist (dbt package)
+
+This directory is the installable dbt package. See the [repository root](../../README.md)
+for full documentation, installation instructions, and the project scaffold.
