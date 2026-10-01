@@ -5,6 +5,8 @@ dbt macros for building a Kimball-style warehouse in two layers:
 - **source layer**: `stage_source`, `add_audit_columns`
 - **business layer**: `build_dimension`, `build_fact`, `build_dataset`, `build_dim_date`, `build_dim_time`, plus key helpers (`generate_surrogate_key`, `generate_date_key`, `dim_key_name`)
 
+Full documentation per layer: [docs/source-layer.md](docs/source-layer.md) and [docs/business-layer.md](docs/business-layer.md).
+
 The modelling conventions are in [data-instructions.md](data-instructions.md). After `dbt deps`, consuming projects can read them at `dbt_packages/optimist/data-instructions.md`.
 
 ## Installation
