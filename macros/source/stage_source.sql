@@ -24,8 +24,10 @@
                                      only rows where this column exceeds the current max in the
                                      target table are loaded. Has no effect on full-refresh runs
                                      or when the model is not materialized as incremental.
-                                     Pair with {{ config(unique_key='...') }} in the model file
-                                     to enable upserts instead of plain appends.
+                                     Pair with {{ config(unique_key='...',
+                                     on_schema_change='append_new_columns') }} in the model file
+                                     to enable upserts instead of plain appends and to add new
+                                     source columns.
 
     Usage — the entire model file can be a single line:
 
@@ -41,7 +43,7 @@
 
     With incremental loading — only process rows newer than what is already staged:
 
-        {{ config(unique_key='record_id') }}
+        {{ config(unique_key='record_id', on_schema_change='append_new_columns') }}
         {{ optimist.stage_source('my_source', 'my_table', incremental_column='updated_at') }}
 #}
 
