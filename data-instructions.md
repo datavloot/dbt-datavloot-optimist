@@ -53,8 +53,13 @@ For each raw table, create a staging model.
 Then add a model entry to `models/source/_schema.yml` with column descriptions and `data_tests`.
 
 **Materialization** — configure by folder in `dbt_project.yml`, not in individual model files.
-The default is `incremental`; alternatives for sources without a reliable update timestamp:
+The default is `table`: rebuilt from the source on every run, so it follows a load that replaces
+the source, deleted rows and new columns included. Alternatives:
 
+- `incremental` — only new rows per run; use for a large append-only source with a reliable
+  update timestamp (see **Incremental loading** below). A row deleted from the source stays.
+  Put such a source in its own subfolder of `models/source/` with `+materialized: incremental`
+  in `dbt_project.yml`.
 - `ephemeral` — the staging model is inlined as a CTE at compile time; use when an external
   tool (dlt, Fivetran) manages incrementality and you don't need the staging model to be
   independently queryable.
@@ -63,9 +68,10 @@ The default is `incremental`; alternatives for sources without a reliable update
 
 **Incremental loading** — when using `incremental` materialization, every staging model needs:
 
-1. A `unique_key` config so dbt upserts instead of appending:
+1. A `unique_key` config so dbt upserts instead of appending, and `on_schema_change` so new
+   source columns are added (dbt ignores them by default):
    ```sql
-   {{ config(unique_key='<natural_key>') }}
+   {{ config(unique_key='<natural_key>', on_schema_change='append_new_columns') }}
    {{ optimist.stage_source('<source>', '<table>', incremental_column='<updated_at_col>') }}
    ```
 2. Ask the captain: which column marks when a row was last updated? (e.g. `updated_at`, `modified_at`, `ingested_at`)

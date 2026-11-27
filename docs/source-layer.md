@@ -140,7 +140,7 @@ optimist.stage_source(source_name, table_name, exclude_columns=[], deduplicate_b
 | `exclude_columns` | list | no | Column names to omit (case-insensitive). Audit columns are always excluded automatically. |
 | `deduplicate_by` | list | no | Columns to partition by when deduplicating. Keeps one row per unique combination. |
 | `order_by` | string | no | Row to keep within each partition. Defaults to `_loaded_at desc`. Prefer a source timestamp when available. |
-| `incremental_column` | string | no | Timestamp column used to filter new rows on incremental runs. Has no effect on full-refresh runs. Pair with `{{ config(unique_key=...) }}` in the model file. |
+| `incremental_column` | string | no | Timestamp column used to filter new rows on incremental runs. Has no effect on full-refresh runs. Pair with `{{ config(unique_key=..., on_schema_change='append_new_columns') }}` in the model file. |
 
 **Excluding columns** — useful for PII or columns handled differently downstream:
 
@@ -150,10 +150,13 @@ optimist.stage_source(source_name, table_name, exclude_columns=[], deduplicate_b
 
 **Incremental loading** — for large tables where processing all rows on every run is too slow.
 Only rows newer than the current max of `incremental_column` in the target table are loaded.
-Pair with `unique_key` so dbt upserts rather than appends:
+Pair with `unique_key` so dbt upserts rather than appends, and set `on_schema_change` so new
+source columns are added (dbt ignores them by default). The model must be materialized as
+`incremental`: for one source, put it in a subfolder of `models/source/` set to
+`+materialized: incremental` in `dbt_project.yml`.
 
 ```sql
-{{ config(unique_key='vessel_id') }}
+{{ config(unique_key='vessel_id', on_schema_change='append_new_columns') }}
 {{ optimist.stage_source('harbor', 'vessels', incremental_column='updated_at') }}
 ```
 
